@@ -116,6 +116,7 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(postA["title"], "Example Post A")
         self.assertEqual(postA["body"], "Just a test")        
 
+        
     def testGetPostsWithTitle(self):
         """Filtering posts by title"""
         postA = models.Post(title="Post with bells", body="Just a test")
@@ -192,6 +193,124 @@ class TestAPI(unittest.TestCase):
         post = posts[0]
         self.assertEqual(post["title"], "Post with bells and whistles")
         self.assertEqual(post["body"], "Still another test")
+
+    def testPostPost(self):
+        """ Posting a new post """
+        data = {
+            "title": "Example Post",
+            "body": "Just a test"
+        }
+
+        response = self.client.post("/api/posts",
+            data=json.dumps(data),
+            content_type="application/json",
+            headers=[("Accept", "application/json")]
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.mimetype, "application/json")
+        self.assertEqual(urlparse(response.headers.get("Location")).path,
+                         "/api/posts/1")
+
+        data = json.loads(response.data)
+        self.assertEqual(data["id"], 1)
+        self.assertEqual(data["title"], "Example Post")
+        self.assertEqual(data["body"], "Just a test")
+
+        posts = session.query(models.Post).all()
+        self.assertEqual(len(posts), 1)
+
+        post = posts[0]
+        self.assertEqual(post.title, "Example Post")
+        self.assertEqual(post.body, "Just a test")
+
+    def testPostEdit(self):
+        """ Editing an existing post """
+        postA = models.Post(title="Post with bells", body="Just a test")
+        postB = models.Post(title="Post with whistles", body="Still a test")
+        postC = models.Post(title="Post with bells and whistles", body="Another test")
+        
+        
+        
+        session.add_all([postA, postB, postC])
+        session.commit()
+                        
+        data = {
+            "title": "Example Edit Post",
+            "body": "Just a test edit"
+        }
+
+        response = self.client.put("/api/post/{}".format(postC.id),
+            data=json.dumps(data),
+            content_type="application/json",
+            headers=[("Accept", "application/json")]
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.mimetype, "application/json")
+        self.assertEqual(urlparse(response.headers.get("Location")).path,
+                         "/api/posts/{}".format(postC.id))
+
+        data = json.loads(response.data)
+        self.assertEqual(data["id"], 3)
+        self.assertEqual(data["title"], "Example Edit Post")
+        self.assertEqual(data["body"], "Just a test edit")
+
+        posts = session.query(models.Post).all()
+        self.assertEqual(len(posts), 3)
+
+        post = posts[2]
+        self.assertEqual(post.title, "Example Edit Post")
+        self.assertEqual(post.body, "Just a test edit")
+        
+        
+    def testUnsupportedMimetype(self):
+        data = "<xml></xml>"
+        response = self.client.post("/api/posts",
+            data=json.dumps(data),
+            content_type="application/xml",
+            headers=[("Accept", "application/json")]
+            )
+        
+        self.assertEqual(response.status_code, 415)
+        self.assertEqual(response.mimetype, "application/json")
+        
+        data = json.loads(response.data)
+        self.assertEqual(data["message"],
+                        "Request must contain application/json data")
+        
+    def testInvalidData(self):
+        """ Posting a post with an invalid body """
+        data = {
+            "title": "Example Post",
+            "body": 32
+        }
+        
+        response = self.client.post("/api/posts",
+            data=json.dumps(data),
+            content_type="application/json",
+            headers=[("Accept", "application/json")])
+        
+        self.assertEqual(response.status_code, 422)
+        
+        data = json.loads(response.data)
+        self.assertEqual(data["message"], "32 is not of type 'string'")
+        
+    def testMissingData(self):
+        """ Posting a post with a missing body """
+        data = {
+            "title": "Example Post",
+        }
+        
+        response = self.client.post("/api/posts",
+        data=json.dumps(data),
+        content_type="application/json",
+        headers=[("Accept", "application/json")])
+        
+        self.assertEqual(response.status_code, 422)
+        
+        data = json.loads(response.data)
+        self.assertEqual(data["message"], "'body' is a required property")
         
     def tearDown(self):
         """ Test teardown """
